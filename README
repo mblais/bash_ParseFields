@@ -1,0 +1,45 @@
+bash_ParseQuoted
+====================
+bash functions for parsing possibly-quoted text fields from a string
+
+.. warning:: This is development level software.  Please do not use unless you
+             are familiar with what that means and are comfortable using that 
+             type of software.
+
+Usage
+-----
+ParseField() parses a single possibly-quoted text field from a string beginning
+at a specified offset, and returns the number of characters scanned. The result
+field is returned in $BASH_REMATCH.
+
+ParseFields() can parse a number of consecutive, possibly-quoted, delimited
+fields from a string into supplied variable names (similar to the bash 'read' 
+builtin).
+
+See the source code for more details.
+
+
+Installation & Configuration
+----------------------------
+Source the file ParseFields into your bash script.
+
+
+About the Project
+-----------------
+
+
+License
+-------
+Copyright 2014 Matt Blais
+
+Licensed under the GNU General Public License, version 2.
+You may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.gnu.org/licenses/gpl-2.0.html
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.

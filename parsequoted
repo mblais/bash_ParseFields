@@ -1,0 +1,143 @@
+#!/bin/bash
+# Quoted-field bash parsing functions: ParseField, ParseFields
+
+ParseFields()
+{
+    # Usage:  ParseFields  [ -d ]  input-string  var-name [ ... ]
+    #
+    # Parses multiple possibly-quoted fields from input-string into
+    # the supplied var(s). Leading whitespace chars are skipped for each field.
+    # After each field, any whitespace chars (and if present, a single
+    # non-ws character from $IFS) are also skipped (scanned).
+    #
+    # Returns the total number of characters scanned from input-string
+    # (including leading ws, fields, trailing ws, and possible delimiter chars).
+    # Returns 0 for an error (empty input or malformed field, or bad arguments).
+    #
+    # NOTE: Unlike the bash 'read' builtin, the last input var-name does NOT 
+    #       slurp up the remainder of input-string.
+    #
+    # Options:
+    #   -d  De-quote and de-backslash all result fields.
+    
+    local _dq_                  # Perform dequote/ds-bs?
+    [[ $1 = -d ]] && { _dq_=1; shift; }
+    local _s_=$1; shift         # The input-string to parse
+    if (($#<1)); then
+        echo "$FUNCNAME: no variable names supplied" >&2
+        return 0
+    fi
+    local -i _i_                # Current parsing index (in _s_)
+    local -i _c_                # Number of chars scanned
+    local -i _n_                # Field length without quotes
+    local _f_                   # Parsed field value
+    local _d_                   # Temp
+    local re=$'\([ \t\n]*['$IFS']\?\)'  # Regex to match whitespace and delimiter
+    for ((_i_=0; _i_<${#_s_} && $#>0; _i_+=_c_)); do
+        ParseField "$_s_" $_i_
+        _c_=$?                  # #of chars scanned
+        if ((_c_==0)); then
+            _i_=0               # Parse error
+            break
+        fi
+        _f_=$BASH_REMATCH       # Parsed field value
+        if ((_dq_)); then
+            IFS='' read _d_ <<<"$_f_"   # De-backslash
+            case $_d_ in \'*\'|\"*\") _n_=${#_d_}-2; _d_=${_d_:1:_n_} ;; esac  # De-quote
+            _f_=$_d_
+        fi
+        # Skip any whitespace and delimiter char following field
+        local -i _o_=_i_+_c_    # Offset of char following parsed field
+        _d_=$(expr match "${_s_:_o_}" "$re")
+        let _c_+=${#_d_}        # Add skipped-chars count to scanned-chars count
+         # Assign parsed field to output var
+        eval "$1=\$_f_"
+        shift                   # $1 = next output var name
+    done
+
+    # Finished parsing; clear any remaining output variables
+    while (($#>0)); do eval "$1="; shift; done
+    return $_i_
+}
+
+ParseField()
+{
+    # Usage:  ParseField  input-string  [ offset ]
+    #
+    # Parse a (possibly quoted) field from input-string, ignoring any leading whitespace
+    #
+    # Offset is the beginning offset in input-string to begin parsing (default=0).
+    #
+    # The parsed result field (including any quotes) is returned in the BASH_REMATCH variable.
+    #
+    # Return value is the total number of characters scanned from input-string
+    # including any leading ws, the parsed field, and any quotes.
+    # 0 is returned for a parsing error (empty or malformed field in input-string).
+    #
+    # An unquoted input field is terminated by any unescaped whitespace and/or a single
+    # unescaped non-whitespace $IFS character, or an unescaped single- or double-quote.
+
+    local -i p=${2:-0}          # Starting position in input string
+    local s=${1:$p}             # String to parse
+    local e=$(shopt extglob)    # Save extglob status
+    shopt -s extglob
+    s=${s##*([$' \t\n'])}       # Trim leading whitespace chars
+    [[ $e = *off ]] && shopt -u extglob  # Restore extglob status
+    local -i w=${#1}-${#s}-$p   # How many ws-chars were trimmed
+    case $s in
+        \"*)  [[ $s =~ ^\"(\\.|[^\\\"])*\" ]] ;;
+        \'*)  [[ $s =~ ^\'(\\.|[^\\\'])*\' ]] ;;
+        *)    [[ $s =~ ^(\\.|[^\'\"$IFS$' \t\n'])* ]] ;;
+    esac
+    local -i r=w+${#BASH_REMATCH}
+    return $r                   # Total chars scanned (trimmed + matched)
+}
+
+DequoteBs()
+{
+    # Remove/interpret backslashes and remove surrounding quotes (if any), from $1.
+    local d
+    IFS='' read d <<<"$1"       # De-backslash
+    case $d in \'*\'|\"*\") local -i n=${#d}-2; d=${d:1:n} ;; esac  # De-quote
+    echo "$d"
+}
+
+############################################################################
+
+test_ParseField()
+{
+    local x
+    read -r x <<EOF         # Test string to parse
+one two_2   three\ 3-3.3 \
+"four '4' \"4\"" \
+'five \'5\' "5"'
+EOF
+    local -i i len=1
+    for ((i=0; len!=0 && i<${#x}; i+=len)); do
+        ParseField "$x" $i
+        len=$?
+        local y=$(DequoteBs "$BASH_REMATCH")
+        printf "%3d  %-20s   %s\n" $len "|$BASH_REMATCH|" "|$y|"
+    done
+}
+
+test_ParseFields()
+{
+    # NB: IFS=' ,:'
+    local r x
+    while read -r r; do x+=$r$'\n'; done <<EOF  # Test string to parse:
+one , two_2   three\ 3-3.3:"four '4' \"4\""
+'five \'5\' "5"' ,6-6\:6 '7 seven\,, 7':"eight:8,8"
+EOF
+    local a b c d e f g h i j k l m n v w y
+    IFS=' ,:' ParseFields "$x" a b c d e f g h i j k l m n
+    local -i s=$?
+    echo "Length: ${#x}   Scanned: $s"
+
+    for v in {a..n}; do
+        eval w=\$$v
+        y=$(DequoteBs "$w")
+        printf "%s: %-20s   %s\n" "$v" "|$w|" "|$y|"
+        [[ -z $w ]] && break
+    done
+}
